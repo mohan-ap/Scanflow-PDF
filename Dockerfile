@@ -1,16 +1,11 @@
 FROM python:3.9
 
-RUN apt-get update -y && apt-get install -y libgl1
-RUN apt-get update && apt install -y openssl
-
 ADD . /app
 
 WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install -r requirements.txt
-
-# COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
 
 CMD ["python", "app.py"]

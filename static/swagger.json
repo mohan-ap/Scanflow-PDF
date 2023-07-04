@@ -128,8 +128,123 @@
           }
         }
       }
+    },    "/files": {
+      "get": {
+        "summary": "Get user files",
+        "description": "Retrieve a list of files associated with the authenticated user.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "file_name": {
+                        "type": "string",
+                        "description": "File name"
+                      },
+                      "file_id": {
+                        "type": "string",
+                        "description": "File ID"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No files available",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Response message"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "description": "Error message"
+                }
+              }
+            }
+          }
+        }
+      }
     },
       "/upload_file": {
+        "post": {
+          "summary": "Upload a file",
+          "consumes": ["multipart/form-data"],
+          "parameters": [
+            {
+              "name": "pdf",
+              "in": "formData",
+              "required": true,
+              "type": "file",
+              "description": "PDF file to upload have to give key as 'pdf' in front end",
+              "x-name": "pdf" 
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "File uploaded successfully",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  },
+                  "file_name": {
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Empty file",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Bad request",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/upload_file_OCR": {
         "post": {
           "summary": "Upload a file",
           "consumes": ["multipart/form-data"],
