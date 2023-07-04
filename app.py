@@ -109,7 +109,7 @@ def process_request_ocr():
         uploaded_file_name = pdf_file.filename
         uploaded_pdf_data = pdf_file.read()
         if not uploaded_pdf_data:
-            return jsonify({'error': 'Empty file'}),404
+            return jsonify({'error': 'Empty file, not proceed'}),404
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
             temp_pdf.write(uploaded_pdf_data)
