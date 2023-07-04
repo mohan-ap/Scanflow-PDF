@@ -244,63 +244,6 @@
           }
         }
       },
-      "/upload_file_OCR": {
-        "post": {
-          "summary": "Upload a file",
-          "consumes": ["multipart/form-data"],
-          "parameters": [
-            {
-              "name": "pdf",
-              "in": "formData",
-              "required": true,
-              "type": "file",
-              "description": "PDF file to upload have to give key as 'pdf' in front end",
-              "x-name": "pdf" 
-            }
-          ],
-          "responses": {
-            "200": {
-              "description": "File uploaded successfully",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "message": {
-                    "type": "string"
-                  },
-                  "file_name": {
-                    "type": "string"
-                  },
-                  "file_id": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "404": {
-              "description": "Empty file",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "error": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "400": {
-              "description": "Bad request",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "error": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
       "/question/{file_id}": {
         "post": {
           "summary": "Ask a question",

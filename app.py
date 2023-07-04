@@ -5,7 +5,7 @@ from flask_swagger_ui import get_swaggerui_blueprint
 from pymongo import MongoClient
 from flask_cors import CORS
 import os
-from paddleocr import PaddleOCR
+# from paddleocr import PaddleOCR
 import tempfile
 from pdf2image import convert_from_path
 import numpy as np 
@@ -27,7 +27,7 @@ app.secret_key = "123"
 
 os.environ["OPENAI_API_KEY"] =os.getenv("OPEN_API_KEY")
 
-ocr = PaddleOCR(use_angle_cls=True,use_gpu=False, lang='en', page_num=1)
+# ocr = PaddleOCR(use_angle_cls=True,use_gpu=False, lang='en', page_num=1)
 
 embeddings = OpenAIEmbeddings()
 
@@ -101,60 +101,60 @@ def files():
         return jsonify({'error': str(e)}), 500
 
     
-@app.route("/upload_file-ocr", methods=["POST"])
-def process_request_ocr():
-    global docsearch, uploaded_pdf_data
-    try:
-        pdf_file = request.files["pdf"]
-        uploaded_file_name = pdf_file.filename
-        uploaded_pdf_data = pdf_file.read()
-        if not uploaded_pdf_data:
-            return jsonify({'error': 'Empty file, not proceed'}),404
+# @app.route("/upload_file-ocr", methods=["POST"])
+# def process_request_ocr():
+#     global docsearch, uploaded_pdf_data
+#     try:
+#         pdf_file = request.files["pdf"]
+#         uploaded_file_name = pdf_file.filename
+#         uploaded_pdf_data = pdf_file.read()
+#         if not uploaded_pdf_data:
+#             return jsonify({'error': 'Empty file, not proceed'}),404
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
-            temp_pdf.write(uploaded_pdf_data)
-            pdf_path = temp_pdf.name
+#         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+#             temp_pdf.write(uploaded_pdf_data)
+#             pdf_path = temp_pdf.name
 
-        session['file_id'] = secrets.token_hex(16)
-        user_id = session.get('user_id')
-        file_id = session['file_id']
-        db.files.insert_one({'user_id':user_id,'file_id': file_id, 'file_name': uploaded_file_name})
+#         session['file_id'] = secrets.token_hex(16)
+#         user_id = session.get('user_id')
+#         file_id = session['file_id']
+#         db.files.insert_one({'user_id':user_id,'file_id': file_id, 'file_name': uploaded_file_name})
 
-        images = convert_from_path(pdf_path)
-        extracted_text = extract_text_from_images(images)
-        raw_text = ' '.join(extracted_text)
-        print(raw_text)
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp_file:
-            temp_file.write(raw_text.encode())
-            pdf_path = temp_file.name
-        uploaded_file = uploaded_file_name.replace('.pdf', '') + '.txt'
-        s3.upload_file(
-            Bucket=BUCKET_NAME,
-            Filename=temp_file.name,
-            Key=uploaded_file
-        )
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
-        texts = splitter.create_documents([raw_text])
-        docsearch = FAISS.from_documents(texts, embeddings)
-        docsearch.save_local(f"{file_id}")
+#         images = convert_from_path(pdf_path)
+#         extracted_text = extract_text_from_images(images)
+#         raw_text = ' '.join(extracted_text)
+#         print(raw_text)
+#         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp_file:
+#             temp_file.write(raw_text.encode())
+#             pdf_path = temp_file.name
+#         uploaded_file = uploaded_file_name.replace('.pdf', '') + '.txt'
+#         s3.upload_file(
+#             Bucket=BUCKET_NAME,
+#             Filename=temp_file.name,
+#             Key=uploaded_file
+#         )
+#         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+#         texts = splitter.create_documents([raw_text])
+#         docsearch = FAISS.from_documents(texts, embeddings)
+#         docsearch.save_local(f"{file_id}")
 
-        return jsonify({'message': 'File uploaded successfully',
-                        'file_name': '{}'.format(uploaded_file_name), 'file_id': '{}'.format(file_id)}), 200
+#         return jsonify({'message': 'File uploaded successfully',
+#                         'file_name': '{}'.format(uploaded_file_name), 'file_id': '{}'.format(file_id)}), 200
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 400
 
-def extract_text_from_images(images):
-    extracted_text = []
-    for image in images:
-        result = ocr.ocr(np.array(image), cls=True)
-        for idx in range(len(result)):
-            res = result[idx]
-            for line in res:
-                content = line[1][0]
-                content = content.replace("'", "")
-                extracted_text.append(content)
-    return extracted_text  
+# def extract_text_from_images(images):
+#     extracted_text = []
+#     for image in images:
+#         result = ocr.ocr(np.array(image), cls=True)
+#         for idx in range(len(result)):
+#             res = result[idx]
+#             for line in res:
+#                 content = line[1][0]
+#                 content = content.replace("'", "")
+#                 extracted_text.append(content)
+#     return extracted_text  
 
 @app.route("/upload_file", methods=["POST"])
 def process_request():
@@ -277,3 +277,60 @@ app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5201)
 
+    #  "/upload_file_OCR": {
+    #     "post": {
+    #       "summary": "Upload a file",
+    #       "consumes": ["multipart/form-data"],
+    #       "parameters": [
+    #         {
+    #           "name": "pdf",
+    #           "in": "formData",
+    #           "required": true,
+    #           "type": "file",
+    #           "description": "PDF file to upload have to give key as 'pdf' in front end",
+    #           "x-name": "pdf" 
+    #         }
+    #       ],
+    #       "responses": {
+    #         "200": {
+    #           "description": "File uploaded successfully",
+    #           "schema": {
+    #             "type": "object",
+    #             "properties": {
+    #               "message": {
+    #                 "type": "string"
+    #               },
+    #               "file_name": {
+    #                 "type": "string"
+    #               },
+    #               "file_id": {
+    #                 "type": "string"
+    #               }
+    #             }
+    #           }
+    #         },
+    #         "404": {
+    #           "description": "Empty file",
+    #           "schema": {
+    #             "type": "object",
+    #             "properties": {
+    #               "error": {
+    #                 "type": "string"
+    #               }
+    #             }
+    #           }
+    #         },
+    #         "400": {
+    #           "description": "Bad request",
+    #           "schema": {
+    #             "type": "object",
+    #             "properties": {
+    #               "error": {
+    #                 "type": "string"
+    #               }
+    #             }
+    #           }
+    #         }
+    #       }
+    #     }
+    #   },
