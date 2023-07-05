@@ -128,31 +128,47 @@
           }
         }
       }
-    },    "/files": {
-      "get": {
-        "summary": "Get user files",
-        "description": "Retrieve a list of files associated with the authenticated user.",
-        "produces": [
-          "application/json"
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
+    },    
+    "/files": {
+      "post": {
+        "summary": "Get a list of user files",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
             "schema": {
               "type": "object",
               "properties": {
-                "files": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "file_name": {
-                        "type": "string",
-                        "description": "File name"
-                      },
-                      "file_id": {
-                        "type": "string",
-                        "description": "File ID"
+                "username": {
+                  "type": "string"
+                }
+              },
+              "required": ["username"]
+            }
+          }
+        ],
+    
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "file_name": {
+                            "type": "string"
+                          },
+                          "file_id": {
+                            "type": "string"
+                          }
+                        }
                       }
                     }
                   }
@@ -160,26 +176,17 @@
               }
             }
           },
-          "404": {
-            "description": "No files available",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string",
-                  "description": "Response message"
-                }
-              }
-            }
-          },
           "500": {
-            "description": "Internal server error",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "error": {
-                  "type": "string",
-                  "description": "Error message"
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -199,6 +206,77 @@
               "type": "file",
               "description": "PDF file to upload have to give key as 'pdf' in front end",
               "x-name": "pdf" 
+            },          
+              {
+                "name": "username",
+                "in": "formData",
+                "required": true,
+                "type": "string",
+                "description": "Username associated with the file (Key: 'username' in the frontend)"
+              }
+          ],
+          "responses": {
+            "200": {
+              "description": "File uploaded successfully",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  },
+                  "file_name": {
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Empty file",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Bad request",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+         "/upload_file_OCR": {
+        "post": {
+          "summary": "Upload a file",
+          "consumes": ["multipart/form-data"],
+          "parameters": [
+            {
+              "name": "pdf",
+              "in": "formData",
+              "required": true,
+              "type": "file",
+              "description": "PDF file to upload have to give key as 'pdf' in front end",
+              "x-name": "pdf" 
+            },
+            {
+              "name": "username",
+              "in": "formData",
+              "required": true,
+              "type": "string",
+              "description": "Username associated with the file (Key: 'username' in the frontend)"
             }
           ],
           "responses": {
@@ -244,23 +322,30 @@
           }
         }
       },
-      "/question/{file_id}": {
+      "/question": {
         "post": {
           "summary": "Ask a question",
           "parameters": [
             {
-              "name": "file_id",
-              "in": "path",
+              "name": "body",
+              "in": "body",
               "required": true,
-              "type": "string",
-              "description": "ID of the file"
-            },
-            {
-              "name": "question",
-              "in": "formData",
-              "required": true,
-              "type": "string",
-              "description": "The question to ask"
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "type": "string"
+                  }
+
+                },
+                "required": ["username","file_id","question"]
+              }
             }
           ],
           "responses": {
@@ -318,8 +403,27 @@
         }
       },
       "/history": {
-        "get": {
+        "post": {
           "summary": "Conversation history",
+          "parameters": [
+            {
+              "name": "body",
+              "in": "body",
+              "required": true,
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["username"]
+              }
+            }
+          ],
           "responses": {
             "200": {
               "description": "Successful response",

@@ -5,7 +5,7 @@ from flask_swagger_ui import get_swaggerui_blueprint
 from pymongo import MongoClient
 from flask_cors import CORS
 import os
-# from paddleocr import PaddleOCR
+from paddleocr import PaddleOCR
 import tempfile
 from pdf2image import convert_from_path
 import numpy as np 
@@ -17,6 +17,8 @@ from langchain.llms import OpenAI
 import boto3
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
+import urllib.parse
+
 
 
 load_dotenv()  # take environment variables from .env
@@ -27,7 +29,7 @@ app.secret_key = "123"
 
 os.environ["OPENAI_API_KEY"] =os.getenv("OPEN_API_KEY")
 
-# ocr = PaddleOCR(use_angle_cls=True,use_gpu=False, lang='en', page_num=1)
+ocr = PaddleOCR(use_angle_cls=True,use_gpu=False, lang='en', page_num=1)
 
 embeddings = OpenAIEmbeddings()
 
@@ -84,10 +86,12 @@ def login():
     else:
         return jsonify({'message': 'Missing username or password'}), 400
     
-@app.route('/files', methods=['GET'])
+@app.route('/files', methods=['POST'])
 def files():
     try:
-        user_id = session.get('user_id')
+        data = request.get_json()
+        user_id = data['username']
+        # user_id = session.get('user_id')
         files = db.files.find({'user_id': user_id})
         file_list = []
         for file in files:
@@ -101,165 +105,179 @@ def files():
         return jsonify({'error': str(e)}), 500
 
     
-# @app.route("/upload_file-ocr", methods=["POST"])
-# def process_request_ocr():
-#     global docsearch, uploaded_pdf_data
-#     try:
-#         pdf_file = request.files["pdf"]
-#         uploaded_file_name = pdf_file.filename
-#         uploaded_pdf_data = pdf_file.read()
-#         if not uploaded_pdf_data:
-#             return jsonify({'error': 'Empty file, not proceed'}),404
+@app.route("/upload_file_OCR", methods=["POST"])
+def process_request_ocr():
+    global docsearch, uploaded_pdf_data
+    try:
+        pdf_file = request.files["pdf"]
+        user_id = request.form.get('username')
 
-#         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
-#             temp_pdf.write(uploaded_pdf_data)
-#             pdf_path = temp_pdf.name
+        uploaded_file_name = pdf_file.filename
+        uploaded_pdf_data = pdf_file.read()
+        if not uploaded_pdf_data:
+            return jsonify({'error': 'Empty file, not proceed'}),404
+        existing_file = db.files.find_one({'$and': [{'user_id': user_id}, {'file_name': uploaded_file_name}]})
+        if existing_file:
+            return jsonify ({"message":"File already exists. Please choose a different filename"})
+        else:
 
-#         session['file_id'] = secrets.token_hex(16)
-#         user_id = session.get('user_id')
-#         file_id = session['file_id']
-#         db.files.insert_one({'user_id':user_id,'file_id': file_id, 'file_name': uploaded_file_name})
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+                temp_pdf.write(uploaded_pdf_data)
+                pdf_path = temp_pdf.name
+            s3.upload_file(
+                Bucket=BUCKET_NAME,
+                Filename=temp_pdf.name,
+                Key=uploaded_file_name
+            )
+            session['file_id'] = secrets.token_hex(16)
+            # user_id = session.get('user_id')
+            file_id = session['file_id']
+            images = convert_from_path(pdf_path)
+            extracted_text = extract_text_from_images(images)
+            raw_text = ' '.join(extracted_text)
+            print(raw_text)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+            texts = splitter.create_documents([raw_text])
+            docsearch = FAISS.from_documents(texts, embeddings)
+            docsearch.save_local(f"{file_id}")
+            db.files.insert_one({'user_id':user_id,'file_id': file_id, 'file_name': uploaded_file_name}),409
 
-#         images = convert_from_path(pdf_path)
-#         extracted_text = extract_text_from_images(images)
-#         raw_text = ' '.join(extracted_text)
-#         print(raw_text)
-#         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp_file:
-#             temp_file.write(raw_text.encode())
-#             pdf_path = temp_file.name
-#         uploaded_file = uploaded_file_name.replace('.pdf', '') + '.txt'
-#         s3.upload_file(
-#             Bucket=BUCKET_NAME,
-#             Filename=temp_file.name,
-#             Key=uploaded_file
-#         )
-#         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
-#         texts = splitter.create_documents([raw_text])
-#         docsearch = FAISS.from_documents(texts, embeddings)
-#         docsearch.save_local(f"{file_id}")
 
-#         return jsonify({'message': 'File uploaded successfully',
-#                         'file_name': '{}'.format(uploaded_file_name), 'file_id': '{}'.format(file_id)}), 200
+            return jsonify({'message': 'File uploaded successfully',
+                        'file_name': '{}'.format(uploaded_file_name), 'file_id': '{}'.format(file_id)}), 200
 
-#     except Exception as e:
-#         return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
-# def extract_text_from_images(images):
-#     extracted_text = []
-#     for image in images:
-#         result = ocr.ocr(np.array(image), cls=True)
-#         for idx in range(len(result)):
-#             res = result[idx]
-#             for line in res:
-#                 content = line[1][0]
-#                 content = content.replace("'", "")
-#                 extracted_text.append(content)
-#     return extracted_text  
+def extract_text_from_images(images):
+    extracted_text = []
+    for image in images:
+        result = ocr.ocr(np.array(image), cls=True)
+        for idx in range(len(result)):
+            res = result[idx]
+            for line in res:
+                content = line[1][0]
+                content = content.replace("'", "")
+                extracted_text.append(content)
+    return extracted_text  
 
 @app.route("/upload_file", methods=["POST"])
 def process_request():
     global docsearch, uploaded_pdf_data
     try:
         pdf_file = request.files["pdf"]
+        user_id = request.form.get('username')
         uploaded_file_name = pdf_file.filename
         uploaded_pdf_data = pdf_file.read()
         if not uploaded_pdf_data:
             return jsonify({'error': 'Empty file'}),404
-        session['file_id'] = secrets.token_hex(16)
-        user_id = session.get('user_id')
-        file_id = session['file_id']
-        db.files.insert_one({'user_id':user_id,'file_id': file_id, 'file_name': uploaded_file_name})
-        reader = PdfReader(BytesIO(uploaded_pdf_data))
-        raw_text = ""
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                raw_text += text 
-        print(raw_text)
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp_file:
-            temp_file.write(raw_text.encode())
-        uploaded_file = uploaded_file_name.replace('.pdf', '') + '.txt'
-        s3.upload_file(
-            Bucket=BUCKET_NAME,
-            Filename=temp_file.name,
-            Key=uploaded_file
-        )
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
-        texts = splitter.create_documents([raw_text])
-        docsearch = FAISS.from_documents(texts, embeddings)
-        docsearch.save_local(f"{file_id}")
+        existing_file = db.files.find_one({'$and': [{'user_id': user_id}, {'file_name': uploaded_file_name}]})
+        if existing_file:
+            return jsonify ({"message":"File already exists. Please choose a different filename"}),409
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+                temp_pdf.write(uploaded_pdf_data)
+                pdf_path = temp_pdf.name
+            s3.upload_file(
+                Bucket=BUCKET_NAME,
+                Filename=temp_pdf.name,
+                Key=uploaded_file_name
+            )
+            s3_file_url = f"https://{BUCKET_NAME}.s3.amazonaws.com/{urllib.parse.quote(uploaded_file_name)}"
 
-        return jsonify({'message': 'File uploaded successfully',
+            session['file_id'] = secrets.token_hex(16)
+            # user_id = session.get('user_id')
+            file_id = session['file_id']
+            reader = PdfReader(BytesIO(uploaded_pdf_data))
+            raw_text = ""
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    raw_text += text 
+            print(raw_text)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+            texts = splitter.create_documents([raw_text])
+            docsearch = FAISS.from_documents(texts, embeddings)
+            docsearch.save_local(f"{file_id}")
+            db.files.insert_one({'user_id':user_id,'file_id': file_id, 
+                                 'file_name': uploaded_file_name, 'file_url': s3_file_url})
+
+            return jsonify({'message': 'File uploaded successfully',
                         'file_name': '{}'.format(uploaded_file_name), 'file_id': '{}'.format(file_id)}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 400
         
 
-@app.route("/question/<string:file_id>", methods=["POST"])
-def question_request(file_id):
+@app.route("/question", methods=["POST"])  
+def question_request():
     global chat_history
     try:
+        data = request.get_json()
+        user_id = data['username']
+        file_id = data['file_id']
+        question = data['question']
+
         result = db.files.find_one({'file_id': file_id})
         file_name = result['file_name']
         new_db = FAISS.load_local(f"{file_id}", embeddings=embeddings)
         if not new_db:
             return jsonify({'error': 'File not found'}),404
 
-        if 'question' in request.form:
-            question = request.form["question"]
-            docs = new_db.as_retriever(search_type="similarity", search_kwargs={"k": 2})
-            qn_chain = ConversationalRetrievalChain.from_llm(OpenAI(), docs)
-            result = qn_chain({"question": question, "chat_history": chat_history})
-            answer = result["answer"]
-            chat_history.append((question, answer))
+        docs = new_db.as_retriever(search_type="similarity", search_kwargs={"k": 2})
+        qn_chain = ConversationalRetrievalChain.from_llm(OpenAI(), docs)
+        result = qn_chain({"question": question, "chat_history": chat_history})
+        answer = result["answer"]
+        chat_history.append((question, answer))
 
-            user_id = session.get('user_id')
-            if user_id:
-                store_messages(user_id, [{'file_name':file_name, 'question':question, 'answer':answer}])
+            # user_id = session.get('user_id')
+        if user_id:
+            store_messages(user_id, file_id, [{'file_name':file_name, 'question':question, 'answer':answer}])
 
-            return jsonify({
+        return jsonify({
                 'question': question,
                 'answer': answer,
-                'chat_history': chat_history
-            }),200
+                'chat_history': retrieve_conversation(user_id,file_id)
+        }),200
 
     except Exception as e:
         return jsonify({'error': str(e)}),400
     
-@app.route("/history", methods=["GET"])
+@app.route("/history", methods=["POST"])
 def history():
     try:
-        user_id = session.get('user_id')
+        data = request.get_json()
+        user_id = data['username']
+        file_id = data['file_id']
+        # user_id = session.get('user_id')
         if not user_id:
             return jsonify({'error': 'User ID not found'})
 
-        conversations = retrieve_conversation(user_id)
+        conversations = retrieve_conversation(user_id,file_id)
         return jsonify(conversations),200
 
     except Exception as e:
         return jsonify({'error': str(e)}),400
     
 
-def store_messages(user_id, messages):
-    conversation = db.history.find_one({'user_id': user_id})
+def store_messages(user_id, file_id, messages):
+    conversation = db.history.find_one({'user_id': user_id, 'file_id': file_id})
 
     if conversation:
         conversation['messages'].extend(messages)
-        db.history.update_one({'user_id': user_id}, {'$set': {'messages': conversation['messages']}})
+        db.history.update_one({'user_id': user_id, 'file_id': file_id}, {'$set': {'messages': conversation['messages']}})
     else:
-        conversation = {'user_id': user_id, 'messages': messages}
-        print(conversation)
+        conversation = {'user_id': user_id, 'file_id': file_id, 'messages': messages}
         db.history.insert_one(conversation)
 
-def retrieve_conversation(user_id):
-    print("before")
-    conversation = db.history.find_one({'user_id': user_id})
-    print(conversation)
+
+def retrieve_conversation(user_id, file_id):
+    conversation = db.history.find_one({'$and': [{'user_id': user_id}, {'file_id': file_id}]})
+
     if conversation:
         return conversation['messages']
     else:
-      return jsonify({"message":"no history found"})
+        return jsonify({"message": "No history found"})
       
 
 SWAGGER_URL = '/swagger'
@@ -275,62 +293,6 @@ app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5201)
+    app.run(host='0.0.0.0', port=5000,debug=True)
 
-    #  "/upload_file_OCR": {
-    #     "post": {
-    #       "summary": "Upload a file",
-    #       "consumes": ["multipart/form-data"],
-    #       "parameters": [
-    #         {
-    #           "name": "pdf",
-    #           "in": "formData",
-    #           "required": true,
-    #           "type": "file",
-    #           "description": "PDF file to upload have to give key as 'pdf' in front end",
-    #           "x-name": "pdf" 
-    #         }
-    #       ],
-    #       "responses": {
-    #         "200": {
-    #           "description": "File uploaded successfully",
-    #           "schema": {
-    #             "type": "object",
-    #             "properties": {
-    #               "message": {
-    #                 "type": "string"
-    #               },
-    #               "file_name": {
-    #                 "type": "string"
-    #               },
-    #               "file_id": {
-    #                 "type": "string"
-    #               }
-    #             }
-    #           }
-    #         },
-    #         "404": {
-    #           "description": "Empty file",
-    #           "schema": {
-    #             "type": "object",
-    #             "properties": {
-    #               "error": {
-    #                 "type": "string"
-    #               }
-    #             }
-    #           }
-    #         },
-    #         "400": {
-    #           "description": "Bad request",
-    #           "schema": {
-    #             "type": "object",
-    #             "properties": {
-    #               "error": {
-    #                 "type": "string"
-    #               }
-    #             }
-    #           }
-    #         }
-    #       }
-    #     }
-    #   },
+  
